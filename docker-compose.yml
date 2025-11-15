@@ -1,0 +1,65 @@
+version: "3.8"
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: analytics
+      POSTGRES_PASSWORD: analytics-pass
+      POSTGRES_DB: analytics_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: analytics
+      PGPASSWORD: analytics-pass
+      PGDATABASE: analytics_db
+      PORT: 3000
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_started
+    ports:
+      - "3000:3000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PGHOST: db
+      PGPORT: 5432
+      PGUSER: analytics
+      PGPASSWORD: analytics-pass
+      PGDATABASE: analytics_db
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_started
+
+volumes:
+  db-data:
